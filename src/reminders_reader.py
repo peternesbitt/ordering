@@ -27,6 +27,7 @@ class RemindersReader:
         """Initialize the EventKit store."""
         self.store = EKEventStore.alloc().init()
         self._request_access()
+        self._reminder_cache = {}  # Cache reminders by title for completion
 
     def _request_access(self):
         """Request access to reminders."""
@@ -71,13 +72,16 @@ class RemindersReader:
         def completion_handler(reminders):
             if reminders:
                 for reminder in reminders:
+                    title = reminder.title() or ''
                     reminders_list.append({
-                        'title': reminder.title() or '',
+                        'title': title,
                         'notes': reminder.notes() or '',
                         'list': reminder.calendar().title() if reminder.calendar() else '',
                         'due_date': str(reminder.dueDateComponents()) if reminder.dueDateComponents() else None,
                         'completed': reminder.isCompleted()
                     })
+                    # Cache the reminder object for completion
+                    self._reminder_cache[title.lower()] = reminder
 
         # Fetch (synchronous for simplicity)
         self.store.fetchRemindersMatchingPredicate_completion_(
@@ -119,6 +123,61 @@ class RemindersReader:
                             items.append(line)
 
         return items
+
+    def mark_complete(self, item_name: str) -> bool:
+        """
+        Mark a reminder as complete by item name.
+
+        Args:
+            item_name: The title of the reminder to mark complete
+
+        Returns:
+            True if successfully marked complete
+        """
+        # Look up reminder in cache
+        reminder = self._reminder_cache.get(item_name.lower())
+
+        if not reminder:
+            print(f"Warning: Reminder '{item_name}' not found in cache")
+            return False
+
+        try:
+            # Mark as complete
+            reminder.setCompleted_(True)
+
+            # Save changes
+            error = None
+            success = self.store.saveReminder_commit_error_(reminder, True, error)
+
+            if success:
+                print(f"✓ Marked complete: {item_name}")
+                return True
+            else:
+                print(f"✗ Failed to mark complete: {item_name}")
+                if error:
+                    print(f"  Error: {error}")
+                return False
+
+        except Exception as e:
+            print(f"Error marking reminder complete: {e}")
+            return False
+
+    def mark_multiple_complete(self, item_names: List[str]) -> Dict[str, bool]:
+        """
+        Mark multiple reminders as complete.
+
+        Args:
+            item_names: List of reminder titles to mark complete
+
+        Returns:
+            Dictionary mapping item names to success status
+        """
+        results = {}
+
+        for item_name in item_names:
+            results[item_name] = self.mark_complete(item_name)
+
+        return results
 
 
 def main():
