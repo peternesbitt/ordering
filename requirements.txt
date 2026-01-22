@@ -1,0 +1,5 @@
+playwright==1.45.0
+schedule==1.2.0
+python-dotenv==1.0.0
+pyobjc-framework-EventKit==10.1
+pyobjc-framework-Cocoa==10.1
